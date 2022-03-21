@@ -11,6 +11,9 @@
 #include "include/cheatman.h"
 #include "include/ps2cnf.h"
 
+#include <stdio.h>
+#include <sys/stat.h>
+
 #define NEWLIB_PORT_AWARE
 #include <fileXio_rpc.h> // fileXioMount("iso:", ***), fileXioUmount("iso:")
 #include <io_common.h>   // FIO_MT_RDONLY
@@ -258,8 +261,14 @@ static int queryISOGameListCache(const struct game_cache_list *cache, base_game_
     return ENOENT;
 }
 
-static int scanForISO(char *path, char type, struct game_list_t **glist)
-{
+static int scanForISO(char *root, char *subfolder, char type, struct game_list_t **glist)
+{   
+    char path[256];
+    sprintf(path, "%s%s", root, subfolder);
+    printf("\n\nScanning for ISO's in: %s\n", path);
+    printf("Root: %s\n", root);
+    printf("Subfolder: %s\n", subfolder);
+    
     int NameLen, count = 0, format, MountFD, cacheLoaded;
     struct game_cache_list cache;
     base_game_info_t cachedGInfo;
@@ -273,7 +282,23 @@ static int scanForISO(char *path, char type, struct game_list_t **glist)
 
     if ((dir = opendir(path)) != NULL) {
         while ((dirent = readdir(dir)) != NULL) {
-            if ((format = isValidIsoName(dirent->d_name, &NameLen)) > 0) {
+
+            if (strcmp(dirent->d_name, ".") == 0 || strcmp(dirent->d_name, "..") == 0)
+                continue;
+
+            struct stat sb;
+            char item[256];   
+            snprintf(item, sizeof(item), "%s\\%s", subfolder, dirent->d_name);
+
+            char fullpath_item[1024];   
+            snprintf(fullpath_item, sizeof(fullpath_item), "%s\\%s", root, item);
+
+
+            printf("Full Path to new item: %s\n", fullpath_item);
+
+            if (stat(fullpath_item, &sb) == 0 && S_ISDIR(sb.st_mode) || S_ISLNK(sb.st_mode)) {
+                count += scanForISO(path, item, type, glist);
+            } else if ((format = isValidIsoName(dirent->d_name, &NameLen)) > 0) {
                 base_game_info_t *game;
 
                 if (NameLen > ISO_GAME_NAME_MAX)
@@ -295,14 +320,20 @@ static int scanForISO(char *path, char type, struct game_list_t **glist)
                         game->startup[GAME_STARTUP_MAX - 1] = '\0';
                         strncpy(game->extension, &dirent->d_name[GAME_STARTUP_MAX + NameLen], sizeof(game->extension));
                         game->extension[sizeof(game->extension) - 1] = '\0';
+                        strncpy(game->folder, subfolder, ISO_GAME_FOLDER_NAME_MAX - 1);
+                        game->folder[sizeof(game->folder) - 1] = '\0';
+                        printf("Game Folder (Path): %s\n", path);
+                        printf("Game Folder (Root): %s\n", root);
+                        printf("Game Folder (Subpath): %s\n", subfolder);
+                        printf("Game Folder: %s\n", game->folder);
                     } else {
                         // Out of memory.
                         break;
                     }
                 } else {
                     if (queryISOGameListCache(&cache, &cachedGInfo, dirent->d_name) != 0) {
+                        printf("Game not found in game cache\n");
                         sprintf(fullpath, "%s/%s", path, dirent->d_name);
-
                         if ((MountFD = fileXioMount("iso:", fullpath, FIO_MT_RDONLY)) >= 0) {
                             if (GetStartupExecName("iso:/SYSTEM.CNF;1", startup, GAME_STARTUP_MAX - 1) == 0) {
                                 struct game_list_t *next = (struct game_list_t *)malloc(sizeof(struct game_list_t));
@@ -319,6 +350,12 @@ static int scanForISO(char *path, char type, struct game_list_t **glist)
                                     game->name[NameLen] = '\0';
                                     strncpy(game->extension, &dirent->d_name[NameLen], sizeof(game->extension));
                                     game->extension[sizeof(game->extension) - 1] = '\0';
+                                    strncpy(game->folder, subfolder, ISO_GAME_FOLDER_NAME_MAX - 1);
+                                    game->folder[sizeof(game->folder) - 1] = '\0';
+                                    printf("Game Folder (Path): %s\n", path);
+                                    printf("Game Folder (Root): %s\n", root);
+                                    printf("Game Folder (Subpath): %s\n", subfolder);
+                                    printf("Game Folder: %s\n", game->folder);
                                 } else {
                                     // Out of memory.
                                     fileXioUmount("iso:");
@@ -365,18 +402,20 @@ static int scanForISO(char *path, char type, struct game_list_t **glist)
         count = 0;
     }
 
-    if (cacheLoaded) {
-        updateISOGameList(path, &cache, *glist, count);
-        freeISOGameListCache(&cache);
-    } else {
+    // if (cacheLoaded) {
+    //     updateISOGameList(path, &cache, *glist, count);
+    //     freeISOGameListCache(&cache);
+    // } else {
         updateISOGameList(path, NULL, *glist, count);
-    }
+    // }
 
     return count;
 }
 
 int sbReadList(base_game_info_t **list, const char *prefix, int *fsize, int *gamecount)
 {
+    printf("In sbReadList\n");
+
     int fd, size, id = 0, result;
     int count;
     char path[256];
@@ -391,13 +430,19 @@ int sbReadList(base_game_info_t **list, const char *prefix, int *fsize, int *gam
 
     // count iso games in "cd" directory
     snprintf(path, sizeof(path), "%sCD", prefix);
-    count = scanForISO(path, SCECdPS2CD, &dlist_head);
+    count = scanForISO(path, "", SCECdPS2CD, &dlist_head);
 
     // count iso games in "dvd" directory
     snprintf(path, sizeof(path), "%sDVD", prefix);
-    if ((result = scanForISO(path, SCECdPS2DVD, &dlist_head)) >= 0) {
+    if ((result = scanForISO(path, "", SCECdPS2DVD, &dlist_head)) >= 0) {
         count = count < 0 ? result : count + result;
     }
+
+    // count iso games in "dvd" directory
+    // snprintf(path, sizeof(path), "%sDVD/Jak III", prefix);
+    // if ((result = scanForISO(path, SCECdPS2DVD, &dlist_head)) >= 0) {
+    //     count = count < 0 ? result : count + result;
+    // }
 
     // count and process games in ul.cfg
     snprintf(path, sizeof(path), "%sul.cfg", prefix);
@@ -670,12 +715,15 @@ static void sbCreatePath_name(const base_game_info_t *game, char *path, const ch
     switch (game->format) {
         case GAME_FORMAT_USBLD:
             snprintf(path, 256, "%sul.%08X.%s.%02x", prefix, USBA_crc32(game_name), game->startup, part);
+            LOG("sbCreatePath_name constructed path: %s\n", path);
             break;
         case GAME_FORMAT_ISO:
-            snprintf(path, 256, "%s%s%s%s%s", prefix, (game->media == SCECdPS2CD) ? "CD" : "DVD", sep, game_name, game->extension);
+            snprintf(path, 256, "%s%s%s%s%s", prefix, (game->media == SCECdPS2CD) ? "CD" : "DVD", sep, game->folder, sep, game_name, game->extension);
+            LOG("sbCreatePath_name constructed path: %s\n", path);
             break;
         case GAME_FORMAT_OLD_ISO:
             snprintf(path, 256, "%s%s%s%s.%s%s", prefix, (game->media == SCECdPS2CD) ? "CD" : "DVD", sep, game->startup, game_name, game->extension);
+            LOG("sbCreatePath_name constructed path: %s\n", path);
             break;
     }
 }

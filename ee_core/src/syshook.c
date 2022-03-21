@@ -64,6 +64,8 @@ u32 New_SifSetDma(SifDmaTransfer_t *sdd, s32 len)
 // ------------------------------------------------------------------------
 void sysLoadElf(char *filename, int argc, char **argv)
 {
+    DPRINTF("sysLoadElf, Path: %s\n", filename);
+
     int r;
     t_ExecData elf;
 

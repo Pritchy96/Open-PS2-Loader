@@ -165,6 +165,7 @@ int LoadOPLModule(int id, int mode, int arg_len, const char *args)
 /*----------------------------------------------------------------------------------------*/
 int LoadElf(const char *path, t_ExecData *data)
 {
+    DPRINTF("LoadElf Path: %s", path);
     struct _lf_elf_load_arg arg;
 
     if (LoadFileInit() < 0)

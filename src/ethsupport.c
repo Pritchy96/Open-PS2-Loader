@@ -512,6 +512,7 @@ static int ethUpdateGameList(void)
                 g->name[31] = '\0';
                 sprintf(g->startup, "SHARE");
                 g->extension[0] = '\0';
+                g->folder[0] = '\0';
                 g->parts = 0x00;
                 g->media = 0x00;
                 g->format = GAME_FORMAT_USBLD;
@@ -568,6 +569,7 @@ static void ethRenameGame(int id, char *newName)
 
 static void ethLaunchGame(int id, config_set_t *configSet)
 {
+    LOG("\nethLaunchGame\n \n");
     int i, compatmask;
     int EnablePS2Logo = 0;
     int result;
@@ -650,7 +652,7 @@ static void ethLaunchGame(int id, config_set_t *configSet)
             sprintf(settings->filename, "%s.%s%s", game->startup, game->name, game->extension);
             break;
         case GAME_FORMAT_ISO:
-            sprintf(settings->filename, "%s%s", game->name, game->extension);
+            sprintf(settings->filename, "%s\\%s%s", game->folder, game->name, game->extension);
             break;
         default: // USBExtreme format.
             sprintf(settings->filename, "ul.%08X.%s", USBA_crc32(game->name), game->startup);
@@ -663,6 +665,14 @@ static void ethLaunchGame(int id, config_set_t *configSet)
     strcpy(settings->smb_prefix, gETHPrefix);
     strcpy(settings->smb_user, gPCUserName);
     strcpy(settings->smb_password, gPCPassword);
+
+    LOG("In ethLaunchGame: \n");
+    LOG("Game Name: %s \n", game->name);
+    LOG("Startup: %s \n", game->startup);
+    LOG("Extension: %s \n", game->extension);
+    LOG("Folder: %s \n", game->folder);
+    LOG("settings->filename: %s\n", settings->filename);
+
 
     // Initialize layer 1 information.
     sbCreatePath(game, partname, ethPrefix, "\\", 0);
