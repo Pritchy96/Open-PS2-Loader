@@ -689,4 +689,4 @@ gui_strings:
 - label: YSENSITIVITY
   string: Analog Y-Axis Sensitivity
 - label: FILE_COUNT
-  string: 'Files found: %i'
+  string: 'Files found: %i/%i'
